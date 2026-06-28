@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 模型权重（太大，不提交）
+*.pt
+
+# 检测结果输出
+output/
+
+# 环境
+venv/
+.venv/
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

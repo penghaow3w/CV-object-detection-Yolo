@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>垃圾分类检测系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        header {
+            text-align: center; padding: 30px 0 20px;
+        }
+        header h1 { font-size: 2rem; color: #00d4aa; margin-bottom: 6px; }
+        header p { color: #8892b0; font-size: 0.95rem; }
+        .upload-card, .result-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .upload-area {
+            border: 2px dashed rgba(0, 212, 170, 0.4);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover { border-color: #00d4aa; background: rgba(0, 212, 170, 0.05); }
+        .upload-area.has-file { border-style: solid; border-color: #00d4aa; }
+        .upload-area img { max-width: 100%; max-height: 300px; border-radius: 8px; }
+        .upload-area .placeholder { color: #8892b0; }
+        .upload-area .placeholder .icon { font-size: 3rem; margin-bottom: 10px; }
+        input[type="file"] { display: none; }
+        .btn {
+            display: inline-block; padding: 12px 28px;
+            border: none; border-radius: 8px; font-size: 1rem;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #00d4aa; color: #1a1a2e;
+            width: 100%; margin-top: 16px;
+            font-weight: 600;
+        }
+        .btn-primary:hover { background: #00e6b8; }
+        .btn-primary:disabled { background: #555; cursor: not-allowed; }
+        .btn-reset {
+            background: transparent; color: #8892b0;
+            border: 1px solid #444; margin-top: 10px; width: 100%;
+        }
+        .result-card { display: none; }
+        .result-card.show { display: block; }
+        .result-card h2 { color: #00d4aa; margin-bottom: 14px; }
+        .stats {
+            display: flex; gap: 12px; flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .stat-item {
+            padding: 8px 16px; border-radius: 8px;
+            font-weight: 600; font-size: 0.9rem;
+        }
+        .stat-plastic { background: rgba(0, 165, 255, 0.2); color: #00a5ff; }
+        .stat-paper { background: rgba(0, 255, 255, 0.2); color: #00ffff; }
+        .stat-metal { background: rgba(192, 192, 192, 0.2); color: #c0c0c0; }
+        .stat-glass { background: rgba(255, 0, 0, 0.2); color: #ff4444; }
+        .stat-kitchen { background: rgba(0, 255, 0, 0.2); color: #00ff00; }
+        .result-image { text-align: center; }
+        .result-image img { max-width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .spinner {
+            display: none; text-align: center; padding: 20px;
+        }
+        .spinner.show { display: block; }
+        .spinner::after {
+            content: ''; display: inline-block;
+            width: 32px; height: 32px;
+            border: 3px solid #444; border-top-color: #00d4aa;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .total-badge {
+            display: inline-block; padding: 4px 12px;
+            background: #00d4aa; color: #1a1a2e;
+            border-radius: 20px; font-weight: 700;
+            font-size: 0.85rem; margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>垃圾分类检测系统</h1>
+            <p>基于 YOLOv8 + COCO 预训练权重 | 支持 5 类垃圾识别</p>
+        </header>
+
+        <div class="upload-card">
+            <div class="upload-area" id="uploadArea">
+                <div class="placeholder" id="placeholder">
+                    <div class="icon">&#128247;</div>
+                    <p>点击或拖拽上传图片</p>
+                    <p style="font-size:0.8rem;margin-top:4px;">支持 JPG / PNG / WebP</p>
+                </div>
+                <img id="preview" style="display:none;" alt="预览">
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+            <button class="btn btn-primary" id="detectBtn" disabled>开始检测</button>
+            <button class="btn btn-reset" id="resetBtn" style="display:none;">重新上传</button>
+        </div>
+
+        <div class="spinner" id="spinner"></div>
+
+        <div class="result-card" id="resultCard">
+            <h2>检测结果</h2>
+            <div class="total-badge" id="totalBadge"></div>
+            <div class="stats" id="stats"></div>
+            <div class="result-image">
+                <img id="resultImage" alt="检测结果">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const placeholder = document.getElementById('placeholder');
+        const detectBtn = document.getElementById('detectBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const spinner = document.getElementById('spinner');
+        const resultCard = document.getElementById('resultCard');
+        const stats = document.getElementById('stats');
+        const resultImage = document.getElementById('resultImage');
+        const totalBadge = document.getElementById('totalBadge');
+
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.borderColor = '#00d4aa'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = ''; });
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) { alert('请上传图片文件'); return; }
+            selectedFile = file;
+            const reader = new FileReader();
+            reader.onload = e => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadArea.classList.add('has-file');
+                detectBtn.disabled = false;
+                resetBtn.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        resetBtn.addEventListener('click', () => {
+            selectedFile = null;
+            preview.style.display = 'none';
+            placeholder.style.display = '';
+            uploadArea.classList.remove('has-file');
+            detectBtn.disabled = true;
+            resetBtn.style.display = 'none';
+            resultCard.classList.remove('show');
+            fileInput.value = '';
+        });
+
+        detectBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            detectBtn.disabled = true;
+            spinner.classList.add('show');
+            resultCard.classList.remove('show');
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+
+            try {
+                const resp = await fetch('/detect', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+
+                totalBadge.textContent = `共检测到 ${data.total_objects} 个垃圾物品`;
+                stats.innerHTML = '';
+                const statMap = {
+                    '塑料': 'stat-plastic', '纸张': 'stat-paper',
+                    '金属': 'stat-metal', '玻璃': 'stat-glass',
+                    '厨余': 'stat-kitchen'
+                };
+                for (const [cat, count] of Object.entries(data.detected)) {
+                    const cls = statMap[cat] || '';
+                    stats.innerHTML += `<span class="stat-item ${cls}">${cat}: ${count} 个</span>`;
+                }
+                resultImage.src = 'data:image/jpeg;base64,' + data.image_base64;
+                resultCard.classList.add('show');
+            } catch (err) {
+                alert('检测失败: ' + err.message);
+            } finally {
+                detectBtn.disabled = false;
+                spinner.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>
